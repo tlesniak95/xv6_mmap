@@ -52,6 +52,42 @@ fdalloc(struct file *f)
   return -1;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+int
+sys_map(void){
+  
+  //WARNING THIS IS JUST COPILOT CODE
+
+  struct proc *curproc = myproc();
+  uint addr;
+  struct file *f;
+  int prot;
+  int flags;
+  int fd;
+  int offset;
+  int size;
+  if(argint(0, (int*)&addr) < 0 || argfd(1, &fd, &f) < 0 || argint(2, &prot) < 0 || argint(3, &flags) < 0 || argint(4, &offset) < 0 || argint(5, &size) < 0)
+    return -1;
+  return mmap(curproc, addr, f, prot, flags, offset, size);
+  
+}
+
+int
+sys_munmap(void){
+  
+  //WARNING THIS IS JUST COPILOT CODE 
+
+  struct proc *curproc = myproc();
+  uint addr;
+  int size;
+  if(argint(0, (int*)&addr) < 0 || argint(1, &size) < 0)
+    return -1;
+  return munmap(curproc, addr, size);
+  
+
+}
+
+///////////////////////////////^^^^^^^^^///////////////////////////////////////////////////////////////////////////
 int
 sys_dup(void)
 {

@@ -1,15 +1,23 @@
-
+#### TRACKING OUR WORK
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 USE COMMENT TO KEEP TRACK OF EDITS
 
+grep -rl "/////////////////////"
+
 
 #### Changelog
 mmap.h      |  Created file                         |tlesniak
 vm.c        |  Commented walkpgdir using ChatGPT    |tlesniak
 vm.c        |  Commented mappages using ChatGPT     |tlesniak
+syscall.c   | added mmap and munmap to syscall      |tlesniak
+syscall.h   | added mmap and munmap to syscall      |tlesniak
+usys.S      | added mmap and munmap to syscall      |tlesniak
+sysfile.c   | added mmap and munmap to syscall      |tlesniak
+user.h      | added mmap and munmap to syscall      |tlesniak
+
 
 
 
