@@ -39,42 +39,50 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   pte_t *pgtab;
 
   pde = &pgdir[PDX(va)];
-  if(*pde & PTE_P){
-    pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
-  } else {
-    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
+  if(*pde & PTE_P){ //if present bit is set
+    pgtab = (pte_t*)P2V(PTE_ADDR(*pde)); //address of page table is extracted using PTE_ADDR and then coverted from physical address to a virtual address using P2V
+  } else { //if page table doesnt exist for the virtual address 
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0) //if alloc is 0 or kalloc retruns 0
       return 0;
     // Make sure all those PTE_P bits are zero.
     memset(pgtab, 0, PGSIZE);
     // The permissions here are overly generous, but they can
     // be further restricted by the permissions in the page table
     // entries, if necessary.
-    *pde = V2P(pgtab) | PTE_P | PTE_W | PTE_U;
-  }
+    *pde = V2P(pgtab) | PTE_P | PTE_W | PTE_U; //then page directory entry is set to point to this new page table and permissions are set
+  } //v2p converts virtual address of the page table to a physical address
   return &pgtab[PTX(va)];
 }
 
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
+/*
+pgdir: A pointer to the page directory, the top level of the two-level page table hierarchy.
+va: The starting virtual address that needs to be mapped.
+size: The number of bytes that need to be mapped.
+pa: The starting physical address to which the virtual address will be mapped.
+perm: Permissions for these mappings.
+*/
 static int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
-  char *a, *last;
+  char *a, *last; 
   pte_t *pte;
 
-  a = (char*)PGROUNDDOWN((uint)va);
-  last = (char*)PGROUNDDOWN(((uint)va) + size - 1);
+  a = (char*)PGROUNDDOWN((uint)va); //a is the starting virtual address, rounded down to ensure its page-alligned
+  last = (char*)PGROUNDDOWN(((uint)va) + size - 1); //is the ending virtual address for the mapping, also rounded down
+  //for loop where one page at a time will be mapped starting at a until we reach last address
   for(;;){
-    if((pte = walkpgdir(pgdir, a, 1)) == 0)
-      return -1;
-    if(*pte & PTE_P)
+    if((pte = walkpgdir(pgdir, a, 1)) == 0) //walkpgdir will get or create the PTE for the current virtual address
+      return -1; //error
+    if(*pte & PTE_P) // if present flag is set then the virtual address has already been mapped
       panic("remap");
-    *pte = pa | perm | PTE_P;
-    if(a == last)
+    *pte = pa | perm | PTE_P; //The PTE is set to point to the current physical address with given permissions and present flag
+    if(a == last) //if reached the last one to be mapped we break
       break;
-    a += PGSIZE;
-    pa += PGSIZE;
+    a += PGSIZE; //increment to next page 
+    pa += PGSIZE; //increment to next page 
   }
   return 0;
 }
