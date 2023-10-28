@@ -17,6 +17,8 @@ syscall.h   | added mmap and munmap to syscall      |tlesniak
 usys.S      | added mmap and munmap to syscall      |tlesniak
 sysfile.c   | added mmap and munmap to syscall      |tlesniak
 user.h      | added mmap and munmap to syscall      |tlesniak
+sysfile.c   | Working on mmap                       |tlesniak   | 10/27/2023
+user.h      | fixed typo, using int in XV6          |tlesniak   | 10/27/2023
 
 
 
@@ -26,7 +28,7 @@ user.h      | added mmap and munmap to syscall      |tlesniak
 static pte_t * 
     walkpgdir(pde_t *pgdir, const void *va, int alloc)
 
-    Used to loacte the page table endty for a given virutal address within a particular page directory. 
+    Used to loacte the page table entry for a given virutal address within a particular page directory. 
     
     walkpgdir is a function that retrieves the page table entry (PTE) for a specified virtual address (va) within a given page directory (pgdir). If the page table for the virtual address doesn't exist and if the alloc flag is set, the function allocates a new page table. It then initializes this page table and updates the page directory to point to it. The function returns the specific PTE corresponding to the provided virtual address.
 
@@ -60,19 +62,6 @@ static int
     Checks if this address is already mapped, and if so, triggers a panic.
     Maps the virtual address to the corresponding physical address with the provided permissions.
     The function returns 0 on successful mapping, and -1 on failure (e.g., if unable to create a new page table).
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
