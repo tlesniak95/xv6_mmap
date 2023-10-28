@@ -24,9 +24,17 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+void *mmap(void* addr, int length, int prot, int flags, int fd, int offset);
+int munmap(void* addr, int length);
+
+
+/*
+Changing size_t and off_t to int based on piazza @1008
+https://canvas.wisc.edu/courses/360069/external_tools/20073
+
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int munmap(void *addr, size_t length)
-
+*/
 
 
 
