@@ -23,6 +23,9 @@ vm.c | removed static from two methods, so we ca use them outside | arul
 proc.h | added mmaps structure & int mmap_count to manage mmaps for each proccess | arul
 proc.c | added init for int mmap_count;
 sysfile.c | worked on mmap and munmap, working on fixing file_backed for munmap | arul
+proc.h | Changed process struct to include a valid bit, and removed int mmap_count
+proc.c | Added init for valid bits
+sysfile.c | Finished file_backed for mmap and munmap, but fileread uses mem, while filewrite uses addr + i. Need to test and see if this is correct. | arul
 
 #### vm.c
 

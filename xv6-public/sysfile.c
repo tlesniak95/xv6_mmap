@@ -258,7 +258,7 @@ int sys_munmap(void) {
     
     for (int i = 0; i < length; i += PGSIZE) {
       // Read the file contents into the allocated page.
-      //For some reason, addr + i works, even though I used mem for fileread?
+      //For some reason, addr + i works, even though I used mem for fileread? CHECK LATER
       int nread = filewrite(f, addr + i, PGSIZE);
       if (nread < 0) {
         return -1;
