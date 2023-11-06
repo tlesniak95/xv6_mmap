@@ -16,6 +16,7 @@
 #include "file.h"
 #include "fcntl.h"
 #include "mmap.h"
+#include "memlayout.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // adding mmap.h
@@ -60,40 +61,143 @@ fdalloc(struct file *f)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // void *mmap(void* addr, int length, int prot, int flags, int fd, int offset);
-void* sys_mmap(void)
-{
-
-  void *addr;
-  int length, prot, flags, fd, offset;
-
-  if (argptr(0, (void *)&addr, sizeof(addr)) < 0 ||
+void* sys_mmap(void) {
+  int int_addr, length, prot, flags, fd, offset;
+  struct proc *curproc = myproc();
+  //Used argint for address, because argptr does address checking (on pg 45 of the manual), and we want to do it ourselves.  
+  if (argint(0, &int_addr) ||
       argint(1, &length) < 0 ||
       argint(2, &prot) < 0 ||
       argint(3, &flags) < 0 ||
       argint(4, &fd) < 0 ||
-      argint(5, &offset) < 0)
-  {
+      argint(5, &offset) < 0) {
     return (void *)-1;
   }
+  void* addr = (void *) int_addr;
+  
+  //Find a starting address for the mapping if MAP_FIXED is not set (since we will ignore given address then), otherwise check if the given address is valid
+  if (!(flags & MAP_FIXED)) {
+    addr = (void *) 0x60000000;
+    int valid_address = 0;
+    while (addr < (void *)0x80000000) {
+      valid_address = 1;
+      //Maybe move this addition later, so first allocation is at 0x60000000? Not sure if it matters. 
+      addr +=  PGSIZE; 
+      for(int i = 0; i < curproc->mmap_count; i++) {
+        if(addr >= curproc->mmaps[i].start && addr < curproc->mmaps[i].start + curproc->mmaps[i].length) {
+          valid_address = 0;
+        }
+      }
 
-  // check length    CHECK THIS I am not sure about the 0x20000000. It is just an assumption based on the what is available to us
-  //
-  if (length <= 0 || length > 0x20000000)
-  {
-    return (void *)-1;
-  }
+      if (valid_address && (walkpgdir(curproc->pgdir, (void *) addr, 0) == 0)) {
+        break;
+      }
+    }
+    if (addr >= (void *)0x80000000) {
+      return (void *)-1;
+    }
+  } else {
+    // check length    CHECK THIS I am not sure about the 0x20000000. It is just an assumption based on the what is available to us
+    if (length <= 0 || length > 0x20000000) {
+      return (void *)-1;
+    }
 
-  if (addr <= (void *)0x60000000 || addr > (void *)0x80000000)
-  {
-    return (void *)-1; // Invalid address
+    if (addr <= (void *)0x60000000 || addr > (void *)0x80000000 || (int) addr % PGSIZE != 0) {
+      return (void *)-1; 
+    }
   }
 
   // Two Main Modes of Operation
 
   // Mode 1: MAP_ANONYMOUS which is similar to malloc
   // can ignore fd and offset
-  if (flags == MAP_ANONYMOUS)
-  {
+  if (flags & MAP_ANONYMOUS) {
+    //Not sure if cast is correct here
+    if ((int) addr + length > KERNBASE) {
+      return (void *)-1;
+    }
+
+    length = PGROUNDUP(length);
+
+    // Implementing similar logic to allocuvm
+    //Casted to char * for arithmetic to work.
+    for(char * i = (char *) addr; i < length + (char *) addr; i += PGSIZE) {
+      void *mem = kalloc();
+      if(mem == 0) {
+        return (void *)-1;
+      }
+
+      if(mappages(curproc->pgdir, (void *)i, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+        kfree(mem);
+        return (void *)-1;
+      }
+    }
+    curproc->sz = PGROUNDUP(curproc->sz + length);
+    curproc->mmaps[curproc->mmap_count].start = addr;
+    curproc->mmaps[curproc->mmap_count].length = length;
+    curproc->mmaps[curproc->mmap_count].flags = flags;
+    curproc->mmaps[curproc->mmap_count].fd = -1;
+    curproc->mmaps[curproc->mmap_count].ref = 1;
+    curproc->mmap_count++;
+    return addr;
+  } else {
+    // Mode 2: file-backed
+    struct file *f = curproc->ofile[fd];
+    
+    if (!f) {
+      return (void *)-1; // Invalid file descriptor.
+    }
+
+    // if ((prot & PROT_READ) && !(f->readable))
+    //     return (void *)-1; // Requested read access, but the file is not readable.
+
+    // if ((prot & PROT_WRITE) && !(f->writable))
+    //   return (void *)-1; // Requested write access, but the file is not writable.
+    length = PGROUNDUP(length);
+    
+    for (int i = 0; i < length; i += PGSIZE) {
+      char *mem = kalloc();
+      if (mem == 0) {
+        return (void *)-1;
+      }
+
+      // Read the file contents into the allocated page.
+      int nread = fileread(f, mem, PGSIZE);
+      if (nread < 0) {
+        kfree(mem);
+        // file_unlock(f);
+        return (void *)-1;
+      }
+
+      // // If we read less than a full page, zero the rest of the page.
+      // if (nread < PGSIZE) {
+      //   memset(mem + nread, 0, PGSIZE - nread);
+      // }
+      
+      // Now map the page into the process's address space.
+      if (mappages(curproc->pgdir, (void *)(addr + i), PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+        kfree(mem);
+        // Release all previously allocated pages in case of failure
+        // [Code to clean up previously allocated memory]
+        // file_unlock(f);
+        return (void *)-1;
+      }
+      // cprintf("Gets here!");
+    }
+
+    // Unlock the file if it was locked
+    // file_unlock(f);
+
+    // Update the process's mmap table here
+    // [Code to update the mmap table]
+    curproc->sz = PGROUNDUP(curproc->sz + length);
+    curproc->mmaps[curproc->mmap_count].start = addr;
+    curproc->mmaps[curproc->mmap_count].length = length;
+    curproc->mmaps[curproc->mmap_count].flags = flags;
+    curproc->mmaps[curproc->mmap_count].fd = -1;
+    curproc->mmaps[curproc->mmap_count].ref = 1;
+    curproc->mmap_count++;
+    return (void *)addr;
   }
 
   return (void *) 0;
@@ -101,18 +205,44 @@ void* sys_mmap(void)
   // return map(addr, length, prot, flags, fd, offset);
 }
 
-int sys_munmap(void)
-{
+int sys_munmap(void) {
 
   // int munmap(void* addr, int length);
+  struct proc *curproc = myproc();
 
-  void *addr;
-  int length;
-  if (argptr(0, (void *)&addr, sizeof(addr)) < 0 ||
+  //Following same address logic as mmap, with the int_addr
+  int int_addr, length;
+  if (argint(0, &int_addr) ||
       argint(1, &length) < 0)
     return -1;
+  void *addr = (void *) int_addr;
+  if (addr <= (void *)0x60000000 || addr > (void *)0x80000000 || (int) addr % PGSIZE != 0)
+    return -1; // Invalid address
 
-  // return munmap(addr, length);
+  
+  length = PGROUNDUP(length);
+  pte_t *pte;
+  int pa;
+  //Following a similar logic to deallocuvm
+  //Casted to char * for arithmetic to work.
+  for(char * i = (char *) addr; i < length + (char *) addr; i += PGSIZE) {
+      pte = walkpgdir(curproc->pgdir, (void *)i, 0);
+      //Move to next PTE if there is nothing for this address
+      if(!pte) {
+        //Removed logic from deallocuvm here, maybe change back. I think it is just an optimization.
+        //Replaced with continue
+        continue;
+      } 
+      else if((*pte & PTE_P) != 0) {
+        pa = PTE_ADDR(*pte);
+        if(pa == 0)
+          panic("kfree");
+        char *v = P2V(pa);
+        kfree(v);
+        *pte = 0;
+      }
+  }
+  curproc->sz = PGROUNDUP(curproc->sz - length);
   return 0;
 }
 

@@ -89,6 +89,8 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
+  //////////////////////////////////////////
+  p->mmap_count = 0; // initialize mmap_count to 0
   release(&ptable.lock);
 
   // Allocate kernel stack.

@@ -32,7 +32,10 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+
+////////////////////////////////////////////////////
+//Removed the static keyword to make it external
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
@@ -64,7 +67,9 @@ size: The number of bytes that need to be mapped.
 pa: The starting physical address to which the virtual address will be mapped.
 perm: Permissions for these mappings.
 */
-static int
+////////////////////////////////////////////////////
+//Removed the static keyword to make it external
+int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
   char *a, *last; 
