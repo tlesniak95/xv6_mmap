@@ -1,3 +1,5 @@
+#define MAX_MMAPS 32
+
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID
@@ -40,6 +42,7 @@ struct mmap {
   int length;                 // length of region
   int flags;                  // flags
   int fd;                     // file descriptor
+  int valid;                 // valid or not
   int ref;                    // reference count
 };
 
@@ -59,8 +62,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   //////////////////////////////
-  struct mmap mmaps[32];             // mmaped regions
-  int mmap_count;                   // number of mmaped regions
+  struct mmap mmaps[MAX_MMAPS];             // mmaped regions
 };
 
 

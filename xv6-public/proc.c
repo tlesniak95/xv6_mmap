@@ -90,7 +90,11 @@ found:
   p->pid = nextpid++;
 
   //////////////////////////////////////////
-  p->mmap_count = 0; // initialize mmap_count to 0
+  //Zero out proc mmaps array to start
+  for(int i = 0; i < 32; i++) {
+    p->mmaps[i].valid = 0;
+    p->mmaps[i].ref = 0;
+  }
   release(&ptable.lock);
 
   // Allocate kernel stack.
