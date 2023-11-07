@@ -138,6 +138,7 @@ void* sys_mmap(void) {
 
   // Mode 1: MAP_ANONYMOUS which is similar to malloc
   // can ignore fd and offset
+  length = PGROUNDUP(length);
 
   if (flags & MAP_ANONYMOUS) {
     //Not sure if cast is correct here
@@ -145,55 +146,25 @@ void* sys_mmap(void) {
       return (void *)-1;
     }
     
-    length = PGROUNDUP(length);
-
-    // Implementing similar logic to allocuvm
     //Casted to char * for arithmetic to work.
     for(char * i = (char *) addr; i < length + (char *) addr; i += PGSIZE) {
-      void *mem = kalloc();
-      if(mem == 0) {
-        return (void *)-1;
-      }
-
-      if(mappages(curproc->pgdir, (void *)i, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
-        kfree(mem);
-        return (void *)-1;
-      }
+      walkpgdir(curproc->pgdir, (void *) ((char *) i), 1);
     }
+
     //Set fd to -1 because it is anonymous
     curproc->mmaps[mmaps_index].fd = -1;
-  } else {
+  } 
+  else {
     // Mode 2: file-backed
-    struct file *f = curproc->ofile[fd];
-    
-    if (!f) {
-      return (void *)-1; // Invalid file descriptor.
+    //Casted to char * for arithmetic to work.
+    for(char * i = (char *) addr; i < length + (char *) addr; i += PGSIZE) {
+      walkpgdir(curproc->pgdir, (void *) ((char *) i), 1);
     }
     
-    length = PGROUNDUP(length);
-    
-    for (int i = 0; i < length; i += PGSIZE) {
-      char *mem = kalloc();
-      if (mem == 0) {
-        return (void *)-1;
-      }
-
-      // Read the file contents into the allocated page. Not sure if addr + i is correct here, or mem
-      int nread = fileread(f, mem, PGSIZE);
-      if (nread < 0) {
-        kfree(mem);
-        return (void *)-1;
-      }
-      
-      // Now map the page into the process's address space.
-      if (mappages(curproc->pgdir, (void *)(addr + i), PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
-        kfree(mem);
-        return (void *)-1;
-      }
-    }
     //Set fd to the given fd because this is file-backed
     curproc->mmaps[mmaps_index].fd = fd;
   }
+  
 
   if (flags & MAP_GROWSUP) {
     //Creates a PTE for the guard page, but doesn't map it to a physical page yet, I believe. 
@@ -279,6 +250,22 @@ int sys_munmap(void) {
       int nread = filewrite(f, addr + i, PGSIZE);
       if (nread < 0) {
         return -1;
+      }
+      pte_t *pte;
+      int pa;
+      pte = walkpgdir(curproc->pgdir, (void *) addr + i, 0);
+      if(!pte) {
+        //Removed logic from deallocuvm here, maybe change back. I think it is just an optimization.
+        //Replaced with continue
+        continue;
+      } 
+      else if((*pte & PTE_P) != 0) {
+        pa = PTE_ADDR(*pte);
+        if(pa == 0)
+          panic("kfree");
+        char *v = P2V(pa);
+        kfree(v);
+        *pte = 0;
       }
     }
   }

@@ -7,6 +7,7 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "mmap.h"
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -86,17 +87,57 @@ trap(struct trapframe *tf)
     }
     //Flag to see if a correct grows up fault happened. If still 0 at the end, then kill the program
     int grows_up = 0;
+
+    //Flag to see if lazy alloc happened. If still 0 at the end, then kill the program.
+    int lazy_alloc = 0;
+
     struct proc *curproc = myproc();
     for (int i = 0; i < MAX_MMAPS; i++) {
+      //Checking if the fault address is within a mmap region
+      if(curproc->mmaps[i].valid && (char *) fault_addr >= (char *) curproc->mmaps[i].start && (char *) fault_addr < (char *) (curproc->mmaps[i].start + curproc->mmaps[i].length)) {
+        //If the fault address is before the start of the mmap, then we should kill the program
+        lazy_alloc = 1;
+        void *mem = kalloc();
+        if(mem == 0) {
+          curproc->killed = 1;
+        }
+
+        if(mappages(curproc->pgdir, (void *) fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+          kfree(mem);
+          curproc->killed = 1;
+        }
+
+        //Checking if the mapping was file backed.
+        if (!(curproc->mmaps[i].flags & MAP_ANONYMOUS)) {
+          struct file *f = curproc->ofile[curproc->mmaps[i].fd];
+          
+          if (!f) {
+            curproc->killed = 1;; 
+          }
+
+          f->off = (int) (curproc->mmaps[i].start - fault_addr);
+
+          int nread = fileread(f, mem, PGSIZE);
+            if (nread < 0) {
+            kfree(mem);
+            curproc->killed = 1;
+            } 
+        }
+        if(!curproc->killed) {
+          lazy_alloc = 1;
+          break;
+        }
+      }
+      //Checks if the fault address was in a guard page
       char *guard_page_virt = (char *)(curproc->mmaps[i].start) + curproc->mmaps[i].length;
       if(curproc->mmaps[i].valid && curproc->mmaps[i].has_guard && guard_page_virt == (char *) PGROUNDDOWN(fault_addr)) {
+        grows_up = 1;
         //Print guard page virt addr and fault addr
         char *mem = kalloc();
         if (mappages(curproc->pgdir, guard_page_virt, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
             curproc->killed = 1;
             grows_up = 0;
         }
-        grows_up = 1;
         curproc->mmaps[i].length += PGSIZE;
 
         //Returns non-zero if there is already a mapping here. This means we should kill the program, since we don't have enough space for the new guard page
@@ -115,7 +156,7 @@ trap(struct trapframe *tf)
       }
     }
     //If not accessing guard page (or doing lazy alloc, if we implement it), then kill the program
-    if(!grows_up) {
+    if(!grows_up && !lazy_alloc) {
       curproc->killed = 1;
       cprintf("Segmentation Fault\n");
     } else {
