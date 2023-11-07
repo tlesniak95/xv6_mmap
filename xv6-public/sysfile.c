@@ -61,11 +61,13 @@ fdalloc(struct file *f)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // void *mmap(void* addr, int length, int prot, int flags, int fd, int offset);
+
 void* sys_mmap(void) {
   int int_addr, length, prot, flags, fd, offset;
   struct proc *curproc = myproc();
   //Used argint for address, because argptr does address checking (on pg 45 of the manual), and we want to do it ourselves.  
   if (argint(0, &int_addr) ||
+
       argint(1, &length) < 0 ||
       argint(2, &prot) < 0 ||
       argint(3, &flags) < 0 ||
@@ -124,6 +126,7 @@ void* sys_mmap(void) {
     if (addr < (void *)0x60000000 || addr > (void *)0x80000000 || (int) addr % PGSIZE != 0) {
       return (void *)-1; 
     }
+
   }
   
   if (flags & MAP_GROWSUP) {
@@ -135,6 +138,7 @@ void* sys_mmap(void) {
 
   // Mode 1: MAP_ANONYMOUS which is similar to malloc
   // can ignore fd and offset
+
   if (flags & MAP_ANONYMOUS) {
     //Not sure if cast is correct here
     if ((int) addr + length > KERNBASE) {
@@ -206,6 +210,7 @@ void* sys_mmap(void) {
 }
 
 int sys_munmap(void) {
+
 
   // int munmap(void* addr, int length);
   struct proc *curproc = myproc();
@@ -287,6 +292,8 @@ int sys_munmap(void) {
   curproc->mmaps[mmaps_index].ref--;
   return 0;
 }
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 int sys_dup(void)

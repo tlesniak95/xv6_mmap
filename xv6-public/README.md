@@ -9,6 +9,7 @@ grep -rl "/////////////////////"
 
 #### Changelog
 
+
 mmap.h | Created file |tlesniak
 vm.c | Commented walkpgdir using ChatGPT |tlesniak
 vm.c | Commented mappages using ChatGPT |tlesniak
