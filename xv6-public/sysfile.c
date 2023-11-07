@@ -75,7 +75,7 @@ void* sys_mmap(void) {
       argint(5, &offset) < 0) {
     return (void *)-1;
   }
-  void* addr = (void *) int_addr;
+  void* addr = (void *) int_addr; //Cast to void * for arithmetic to work.
   
   //Find a spot to put the mmap in the mmap array, in proc.h
   int mmaps_index = -1;
@@ -93,19 +93,23 @@ void* sys_mmap(void) {
   }
 
   //Find a starting address for the mapping if MAP_FIXED is not set (since we will ignore given address then)
-  if (!(flags & MAP_FIXED)) {
+  if (!(flags & MAP_FIXED)) { //If MAP_FIXED is not set, then we find a starting address for the mapping
     addr = (void *) 0x60000000;
-    int valid_address = 0;
+    int valid_address = 0; //Flag to see if the address is valid
     while (addr < (void *)0x80000000) {
       addr +=  PGSIZE; 
       valid_address = 1;
-      //Maybe move this addition later, so first allocation is at 0x60000000? Not sure if it matters. 
+     //checks if a given virtual address is already included in any of the existing
+     //memory-mapped regions of the current process
       for(int i = 0; i < MAX_MMAPS; i++) {
         if(curproc->mmaps[i].valid && addr >= curproc->mmaps[i].start && addr < curproc->mmaps[i].start + curproc->mmaps[i].length) {
-          valid_address = 0;
+          valid_address = 0; //
         }
       }
-
+      //walhpgdir is checing if the current addr is already mapped in the process's
+      //page table. walkpgdir looks up the page table entry for a given vitrual address.
+      //if it returns - it means that there is no page table entry for the given address and 
+      //we can use it
       if (valid_address && (walkpgdir(curproc->pgdir, (void *) addr, 0) == 0)) {
         break;
       }
@@ -118,7 +122,7 @@ void* sys_mmap(void) {
   } 
   //Otherwise, we use the given address, and check if it is valid
   else {
-    // check length    CHECK THIS I am not sure about the 0x20000000. It is just an assumption based on the what is available to us
+    // check length    
     if (length <= 0 || length > 0x20000000) {
       return (void *)-1;
     }
@@ -128,7 +132,7 @@ void* sys_mmap(void) {
     }
 
   }
-  
+  //check that length wont exceed KERNBASE
   if (flags & MAP_GROWSUP) {
     if (length + PGSIZE + (int) addr > KERNBASE) {
       return (void *)-1;
@@ -140,7 +144,7 @@ void* sys_mmap(void) {
   // can ignore fd and offset
 
   if (flags & MAP_ANONYMOUS) {
-    //Not sure if cast is correct here
+    
     if ((int) addr + length > KERNBASE) {
       return (void *)-1;
     }
@@ -150,11 +154,12 @@ void* sys_mmap(void) {
     // Implementing similar logic to allocuvm
     //Casted to char * for arithmetic to work.
     for(char * i = (char *) addr; i < length + (char *) addr; i += PGSIZE) {
-      void *mem = kalloc();
+      void *mem = kalloc(); //kalloc is used to allocate one page of physical memory
       if(mem == 0) {
         return (void *)-1;
       }
-
+      //mappages is used to map a page of physical memory to a page of virtual memory
+      //v2p is used to convert a virtual address to a physical address
       if(mappages(curproc->pgdir, (void *)i, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
         kfree(mem);
         return (void *)-1;
@@ -179,6 +184,8 @@ void* sys_mmap(void) {
       }
 
       // Read the file contents into the allocated page. Not sure if addr + i is correct here, or mem
+      //file read is a function that reads from the open file into the memory pointed to by mem
+      //
       int nread = fileread(f, mem, PGSIZE);
       if (nread < 0) {
         kfree(mem);
