@@ -16,6 +16,7 @@
 #include "file.h"
 #include "fcntl.h"
 #include "mmap.h"
+#include "memlayout.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // adding mmap.h
@@ -60,7 +61,42 @@ fdalloc(struct file *f)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // void *mmap(void* addr, int length, int prot, int flags, int fd, int offset);
-void* sys_mmap(void)
+
+extern pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
+extern int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+
+char *find_free_range(uint size)
+{
+  char *addr = (char *)myproc()->sz;
+  while (1)
+  {
+    // Check if the address is already mapped
+    if (walkpgdir(myproc()->pgdir, addr, 0) == 0)
+    {
+      // 'addr' is not mapped. Check next pages to see if we have a contiguous range.
+      char *temp = addr + PGSIZE;
+      int found = 1;
+      for (uint i = PGSIZE; i < size; i += PGSIZE)
+      {
+        if (walkpgdir(myproc()->pgdir, temp, 0) != 0)
+        {
+          // This page is already mapped, so the range isn't free.
+          found = 0;
+          break;
+        }
+        temp += PGSIZE;
+      }
+      if (found)
+      {
+        // Found a free range starting at 'addr'
+        return addr;
+      }
+    }
+    addr += PGSIZE;
+  }
+}
+
+void *sys_mmap(void)
 {
 
   void *addr;
@@ -76,31 +112,84 @@ void* sys_mmap(void)
     return (void *)-1;
   }
 
+  char *va;
+
   // check length    CHECK THIS I am not sure about the 0x20000000. It is just an assumption based on the what is available to us
   //
   if (length <= 0 || length > 0x20000000)
   {
     return (void *)-1;
   }
-
-  if (addr <= (void *)0x60000000 || addr > (void *)0x80000000)
+  if (flags & MAP_FIXED)
   {
-    return (void *)-1; // Invalid address
+    if (addr <= (void *)0x60000000 || addr > (void *)0x80000000)
+    {
+      return (void *)-1; // Invalid address
+    }
+    va = (char *)addr;
+  }
+  else
+  {
+    va = find_free_range(length);
+    if (!va)
+    {
+      // No suitable range found, return error
+      return (void *)-1;
+    }
   }
 
   // Two Main Modes of Operation
 
   // Mode 1: MAP_ANONYMOUS which is similar to malloc
   // can ignore fd and offset
-  if (flags == MAP_ANONYMOUS)
+  if (flags & MAP_ANONYMOUS)
   {
+    // Calculate the number of pages required
+    int num_pages = (length + PGSIZE - 1) / PGSIZE; // Round up to nearest page size
+    char *mem;
+
+    for (int i = 0; i < num_pages; i++)
+    {
+      mem = kalloc(); // Allocate one page of physical memory
+      if (!mem)       // If allocation fails, undo any previous allocations and return an error
+      {
+        /*
+          for (int j = 0; j < i; j++)
+          {
+              // Use mappages to free previously allocated memory
+              pte_t *pte = walkpgdir(myproc()->pgdir, va - j * PGSIZE, 0);
+              if (pte && (*pte & PTE_P))
+              {
+                  char *v = P2V(PTE_ADDR(*pte));
+                  kfree(v);
+                  *pte = 0;
+              }
+          }
+          return (void *)-1;
+          */
+      }
+
+      // Map the allocated memory to the requested address
+      if (mappages(myproc()->pgdir, va, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+      {
+        kfree(mem); // If mapping fails, free the allocated memory and return an error
+        return (void *)-1;
+      }
+
+      va += PGSIZE; // Move to the next virtual page
+    }
+
+    return addr; // Return the starting address of the allocated memory
   }
 
-  return (void *) 0;
-
-  // return map(addr, length, prot, flags, fd, offset);
+  // ... [any other modes of operation if applicable]
+  return (void *)-1; // Default return for unspecified or unsupported flags
 }
 
+
+
+
+/**/
 int sys_munmap(void)
 {
 
@@ -115,6 +204,8 @@ int sys_munmap(void)
   // return munmap(addr, length);
   return 0;
 }
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 int sys_dup(void)
