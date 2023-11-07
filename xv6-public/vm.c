@@ -35,6 +35,7 @@ seginit(void)
 
 ////////////////////////////////////////////////////
 //Removed the static keyword to make it external
+
 pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
@@ -45,7 +46,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   if(*pde & PTE_P){ //if present bit is set
     pgtab = (pte_t*)P2V(PTE_ADDR(*pde)); //address of page table is extracted using PTE_ADDR and then coverted from physical address to a virtual address using P2V
   } else { //if page table doesnt exist for the virtual address 
-    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0) //if alloc is 0 or kalloc retruns 0
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0) //if alloc is 0 or kalloc returns 0
       return 0;
     // Make sure all those PTE_P bits are zero.
     memset(pgtab, 0, PGSIZE);
@@ -67,8 +68,10 @@ size: The number of bytes that need to be mapped.
 pa: The starting physical address to which the virtual address will be mapped.
 perm: Permissions for these mappings.
 */
+
 ////////////////////////////////////////////////////
 //Removed the static keyword to make it external
+
 int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
