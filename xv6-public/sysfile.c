@@ -280,6 +280,22 @@ int sys_munmap(void) {
       if (nread < 0) {
         return -1;
       }
+
+      pte = walkpgdir(curproc->pgdir, (void *) addr + i, 0);
+      //Move to next PTE if there is nothing for this address
+      if(!pte) {
+        //Removed logic from deallocuvm here, maybe change back. I think it is just an optimization.
+        //Replaced with continue
+        continue;
+      } 
+      else if((*pte & PTE_P) != 0) {
+        pa = PTE_ADDR(*pte);
+        if(pa == 0)
+          panic("kfree");
+        char *v = P2V(pa);
+        kfree(v);
+        *pte = 0;
+      }
     }
   }
   //Might not need to clear fields these out, since we are using a valid bit, but keeping it here for now. 
