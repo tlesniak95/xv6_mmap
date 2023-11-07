@@ -115,6 +115,8 @@ trap(struct trapframe *tf)
             curproc->killed = 1;; 
           }
 
+          //I believe we need to set the offset based on the fault address (so we can read the correct part of the file)
+          //But since the code breaks if we #include file.h, we might need to define a helper function in file.c to change the offset.
           f->off = (int) (curproc->mmaps[i].start - fault_addr);
 
           int nread = fileread(f, mem, PGSIZE);
