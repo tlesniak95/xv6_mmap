@@ -1,3 +1,5 @@
+#define MAX_MMAPS 32
+
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID
@@ -34,6 +36,16 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+/////////////////////////////////////
+struct mmap {
+  void * start;                  // start address
+  int length;                 // length of region
+  int flags;                  // flags
+  int fd;                     // file descriptor
+  int valid;                 // valid or not
+  int ref;                    // reference count
+};
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -49,7 +61,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  //////////////////////////////
+  struct mmap mmaps[MAX_MMAPS];             // mmaped regions
 };
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

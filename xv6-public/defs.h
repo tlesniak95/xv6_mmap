@@ -9,6 +9,8 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+//////////////////////////////////
+struct mmap;
 
 // bio.c
 void            binit(void);
@@ -185,6 +187,10 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+//////////////////////////////
+//Made two functions external from vm.c
+int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+uint *          walkpgdir(pde_t *pgdir, const void *va, int alloc);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

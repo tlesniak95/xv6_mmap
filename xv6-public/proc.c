@@ -89,6 +89,12 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
+  //////////////////////////////////////////
+  //Zero out proc mmaps array to start
+  for(int i = 0; i < 32; i++) {
+    p->mmaps[i].valid = 0;
+    p->mmaps[i].ref = 0;
+  }
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -196,6 +202,9 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+  //////////////////////////////////////////
+  //Copy other mapped regions from parent to child (the ones created through mmap system call)
+  //Will implement next
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
