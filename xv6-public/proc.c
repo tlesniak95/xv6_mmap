@@ -6,6 +6,8 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "mmap.h"
+#include "memlayout.h"
 
 struct {
   struct spinlock lock;
@@ -94,6 +96,7 @@ found:
   for(int i = 0; i < 32; i++) {
     p->mmaps[i].valid = 0;
     p->mmaps[i].ref = 0;
+    p->mmaps[i].has_guard = 0;
   }
   release(&ptable.lock);
 
@@ -205,6 +208,61 @@ fork(void)
   //////////////////////////////////////////
   //Copy other mapped regions from parent to child (the ones created through mmap system call)
   //Will implement next
+  for(int i = 0; i < MAX_MMAPS; i++) {
+    if(curproc->mmaps[i].valid == 1) {
+      //Two cases, MAP_SHARED and MAP_PRIVATE
+      //Case 1: MAP_SHARED
+      if(curproc->mmaps[i].flags & MAP_SHARED) {
+        np->mmaps[i].start = curproc->mmaps[i].start;
+        np->mmaps[i].length = curproc->mmaps[i].length;
+        np->mmaps[i].flags = curproc->mmaps[i].flags;
+        np->mmaps[i].fd = curproc->mmaps[i].fd;
+        np->mmaps[i].valid = curproc->mmaps[i].valid;
+        curproc->mmaps[i].ref++;
+        np->mmaps[i].ref = curproc->mmaps[i].ref;
+
+        pte_t *pte_parent;
+        int pa;
+        //Might need to use V2P(mem), by adding another field in the mmap struct
+        for (int j = 0; j < curproc->mmaps[i].length; j += PGSIZE) {
+          pte_parent = walkpgdir(curproc->pgdir, (char*) curproc->mmaps[i].start + j, 0);
+          cprintf("pte_parent: %p\n", *pte_parent);
+          pa = PTE_ADDR(*pte_parent);
+          //Use P2V or V2P? This line might be wrong
+          if (mappages(np->pgdir, (void*) curproc->mmaps[i].start + j, PGSIZE, pa, PTE_W | PTE_U) < 0) {
+            cprintf("Error in fork: mappages\n");
+            return -1;
+          }
+        }
+      } 
+      //Case 2: MAP_SHARED
+      else if (curproc->mmaps[i].flags & MAP_PRIVATE) {
+        np->mmaps[i].start = curproc->mmaps[i].start;
+        np->mmaps[i].length = curproc->mmaps[i].length;
+        np->mmaps[i].flags = curproc->mmaps[i].flags;
+        np->mmaps[i].fd = curproc->mmaps[i].fd;
+        np->mmaps[i].valid = curproc->mmaps[i].valid;
+        np->mmaps[i].ref = curproc->mmaps[i].ref;
+
+        pte_t *pte_parent;
+        //Might need to use V2P(mem), by adding another field in the mmap struct
+        for (int j = 0; j < curproc->mmaps[i].length; j += PGSIZE) {
+          char *mem = kalloc();
+          if (mem == 0) {
+            cprintf("Error in fork: kalloc\n");
+            return -1;
+          }
+          
+          pte_parent = walkpgdir(curproc->pgdir, (char*) curproc->mmaps[i].start + j, 0);
+          memmove(mem, P2V(PTE_ADDR(*pte_parent)), PGSIZE);
+          if (mappages(np->pgdir, (void*) curproc->mmaps[i].start + j, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+            cprintf("Error in fork: mappages\n");
+            return -1;
+          }
+        }        
+      }
+    }
+  }
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -242,6 +300,36 @@ exit(void)
 
   if(curproc == initproc)
     panic("init exiting");
+    
+  ///////////////////////////////////////
+  //Close all mmaped regions
+  for(int i = 0; i < MAX_MMAPS; i ++) {
+    if(curproc->mmaps[i].valid == 1) {
+      //Case 1: MAP_SHARED
+      if(curproc->mmaps[i].flags & MAP_SHARED) {
+        // curproc->mmaps[i].ref--;
+        if(curproc->mmaps[i].ref == 0) {
+          pte_t *pte;
+          for (int j = 0; j < curproc->mmaps[i].length; j += PGSIZE) {
+            pte = walkpgdir(curproc->pgdir, (char*) curproc->mmaps[i].start + j, 0);
+            kfree(P2V(PTE_ADDR(*pte)));
+            *pte = 0;
+          }
+        }
+        
+      }
+      //Case 2: MAP_PRIVATE
+      else if(curproc->mmaps[i].flags & MAP_PRIVATE) {
+        // curproc->mmaps[i].ref--;
+        pte_t *pte;
+        for (int j = 0; j < curproc->mmaps[i].length; j += PGSIZE) {
+          pte = walkpgdir(curproc->pgdir, (char*) curproc->mmaps[i].start + j, 0);
+          kfree(P2V(PTE_ADDR(*pte)));
+          *pte = 0;
+        }
+      }
+    }
+  }
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){

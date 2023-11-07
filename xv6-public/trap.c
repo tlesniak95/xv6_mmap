@@ -77,7 +77,50 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  ////////////////////////////////
+  //Lazy Alloc? Might do it? and MAP_GROWSUP
+  case T_PGFLT:
+    int fault_addr = rcr2();
+    if(fault_addr % PGSIZE != 0) {
+      fault_addr = PGROUNDDOWN(fault_addr);
+    }
+    //Flag to see if a correct grows up fault happened. If still 0 at the end, then kill the program
+    int grows_up = 0;
+    struct proc *curproc = myproc();
+    for (int i = 0; i < MAX_MMAPS; i++) {
+      char *guard_page_virt = (char *)(curproc->mmaps[i].start) + curproc->mmaps[i].length;
+      if(curproc->mmaps[i].valid && curproc->mmaps[i].has_guard && guard_page_virt == (char *) PGROUNDDOWN(fault_addr)) {
+        //Print guard page virt addr and fault addr
+        char *mem = kalloc();
+        if (mappages(curproc->pgdir, guard_page_virt, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+            curproc->killed = 1;
+            grows_up = 0;
+        }
+        grows_up = 1;
+        curproc->mmaps[i].length += PGSIZE;
 
+        //Returns non-zero if there is already a mapping here. This means we should kill the program, since we don't have enough space for the new guard page
+        pte_t *pte;
+        pte = walkpgdir(curproc->pgdir, (void *) guard_page_virt + PGSIZE, 0);
+        if(*pte !=  0) {
+          curproc->killed = 1;
+          grows_up = 0;
+          break;
+        } 
+        else {
+          //Set the guard page
+          walkpgdir(curproc->pgdir, guard_page_virt + PGSIZE, 1);
+          break;
+        }
+      }
+    }
+    //If not accessing guard page (or doing lazy alloc, if we implement it), then kill the program
+    if(!grows_up) {
+      curproc->killed = 1;
+      cprintf("Segmentation Fault\n");
+    } else {
+      break;
+    }
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
