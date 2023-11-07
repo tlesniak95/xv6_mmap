@@ -202,6 +202,9 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+  //////////////////////////////////////////
+  //Copy other mapped regions from parent to child (the ones created through mmap system call)
+  //Will implement next
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;

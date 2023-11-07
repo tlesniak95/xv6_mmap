@@ -166,8 +166,7 @@ void* sys_mmap(void) {
       if (mem == 0) {
         return (void *)-1;
       }
-      cprintf("mem: %p\n", mem);
-      cprintf("addr: %p\n", addr + i);
+
       // Read the file contents into the allocated page. Not sure if addr + i is correct here, or mem
       int nread = fileread(f, mem, PGSIZE);
       if (nread < 0) {
@@ -180,11 +179,14 @@ void* sys_mmap(void) {
         kfree(mem);
         return (void *)-1;
       }
+      cprintf("mem: %p\n", mem);
+      cprintf("addr: %p\n", addr + i);
     }
     //Set fd to the given fd because this is file-backed
     curproc->mmaps[mmaps_index].fd = fd;
   }
-  curproc->sz = PGROUNDUP(curproc->sz + length);
+  //Commented out size change beacuse this affects copyuvm. Don't think we need this. 
+  // curproc->sz = curproc->sz + length;
   curproc->mmaps[mmaps_index].start = addr;
   curproc->mmaps[mmaps_index].length = length;
   curproc->mmaps[mmaps_index].flags = flags;
@@ -265,7 +267,8 @@ int sys_munmap(void) {
       }
     }
   }
-  curproc->sz = PGROUNDUP(curproc->sz - length);
+  //Commented out size change beacuse this affects copyuvm. Don't think we need this. 
+  // curproc->sz = curproc->sz - length;
   //Might not need to clear fields these out, since we are using a valid bit, but keeping it here for now. 
   curproc->mmaps[mmaps_index].start = (void *) -1;
   curproc->mmaps[mmaps_index].length = -1;
