@@ -44,6 +44,7 @@ struct mmap {
   int fd;                     // file descriptor
   int valid;                 // valid or not
   int ref;                    // reference count
+  int has_guard;              // has guard page or not
 };
 
 // Per-process state

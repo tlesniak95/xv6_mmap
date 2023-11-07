@@ -84,7 +84,7 @@ void* sys_mmap(void) {
       break;
     }
   }
-
+  
   if(mmaps_index == -1) {
     cprintf("Can only have 32 mmaps at a time\n");
     return (void *)-1;
@@ -95,9 +95,9 @@ void* sys_mmap(void) {
     addr = (void *) 0x60000000;
     int valid_address = 0;
     while (addr < (void *)0x80000000) {
+      addr +=  PGSIZE; 
       valid_address = 1;
       //Maybe move this addition later, so first allocation is at 0x60000000? Not sure if it matters. 
-      addr +=  PGSIZE; 
       for(int i = 0; i < MAX_MMAPS; i++) {
         if(curproc->mmaps[i].valid && addr >= curproc->mmaps[i].start && addr < curproc->mmaps[i].start + curproc->mmaps[i].length) {
           valid_address = 0;
@@ -107,7 +107,9 @@ void* sys_mmap(void) {
       if (valid_address && (walkpgdir(curproc->pgdir, (void *) addr, 0) == 0)) {
         break;
       }
+      
     }
+    
     if (addr >= (void *)0x80000000) {
       return (void *)-1;
     }
@@ -119,11 +121,16 @@ void* sys_mmap(void) {
       return (void *)-1;
     }
 
-    if (addr <= (void *)0x60000000 || addr > (void *)0x80000000 || (int) addr % PGSIZE != 0) {
+    if (addr < (void *)0x60000000 || addr > (void *)0x80000000 || (int) addr % PGSIZE != 0) {
       return (void *)-1; 
     }
   }
-
+  
+  if (flags & MAP_GROWSUP) {
+    if (length + PGSIZE + (int) addr > KERNBASE) {
+      return (void *)-1;
+    }
+  }
   // Two Main Modes of Operation
 
   // Mode 1: MAP_ANONYMOUS which is similar to malloc
@@ -133,7 +140,7 @@ void* sys_mmap(void) {
     if ((int) addr + length > KERNBASE) {
       return (void *)-1;
     }
-
+    
     length = PGROUNDUP(length);
 
     // Implementing similar logic to allocuvm
@@ -149,7 +156,7 @@ void* sys_mmap(void) {
         return (void *)-1;
       }
     }
-    //Set fd to -1 to indicate that it is anonymous
+    //Set fd to -1 because it is anonymous
     curproc->mmaps[mmaps_index].fd = -1;
   } else {
     // Mode 2: file-backed
@@ -179,14 +186,17 @@ void* sys_mmap(void) {
         kfree(mem);
         return (void *)-1;
       }
-      cprintf("mem: %p\n", mem);
-      cprintf("addr: %p\n", addr + i);
     }
     //Set fd to the given fd because this is file-backed
     curproc->mmaps[mmaps_index].fd = fd;
   }
-  //Commented out size change beacuse this affects copyuvm. Don't think we need this. 
-  // curproc->sz = curproc->sz + length;
+
+  if (flags & MAP_GROWSUP) {
+    //Creates a PTE for the guard page, but doesn't map it to a physical page yet, I believe. 
+    //kalloc() is called in trap.c, in case of a page fault on the guard page
+    walkpgdir(curproc->pgdir, (void *) ((char *) addr + length), 1);
+    curproc->mmaps[mmaps_index].has_guard = 1;
+  }
   curproc->mmaps[mmaps_index].start = addr;
   curproc->mmaps[mmaps_index].length = length;
   curproc->mmaps[mmaps_index].flags = flags;
@@ -267,14 +277,13 @@ int sys_munmap(void) {
       }
     }
   }
-  //Commented out size change beacuse this affects copyuvm. Don't think we need this. 
-  // curproc->sz = curproc->sz - length;
   //Might not need to clear fields these out, since we are using a valid bit, but keeping it here for now. 
   curproc->mmaps[mmaps_index].start = (void *) -1;
   curproc->mmaps[mmaps_index].length = -1;
   curproc->mmaps[mmaps_index].flags = -1;
   curproc->mmaps[mmaps_index].fd = -1;
   curproc->mmaps[mmaps_index].valid = 0;
+  curproc->mmaps[mmaps_index].has_guard = 0;
   curproc->mmaps[mmaps_index].ref--;
   return 0;
 }

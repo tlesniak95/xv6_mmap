@@ -26,7 +26,7 @@ sysfile.c | worked on mmap and munmap, working on fixing file_backed for munmap 
 proc.h | Changed process struct to include a valid bit, and removed int mmap_count
 proc.c | Added init for valid bits
 sysfile.c | Finished file_backed for mmap and munmap, but fileread uses mem, while filewrite uses addr + i. Need to test and see if this is correct. | arul
-
+trap.c | Added handler for grows_up page faults | arul
 #### vm.c
 
 static pte_t *
